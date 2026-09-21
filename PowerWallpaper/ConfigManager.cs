@@ -14,7 +14,7 @@ namespace PowerWallpaper
 
     public static class ConfigManager
     {
-        private static readonly string ConfigPath = "config.json";
+        private static readonly string ConfigPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
 
         public static Config Load()
         {
