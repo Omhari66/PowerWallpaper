@@ -6,26 +6,51 @@ namespace PowerWallpaper
 {
     static class Program
     {
+        // Keep a reference so the GC never collects the Mutex while the app is running
+        private static Mutex? _singleInstanceMutex;
+
         [STAThread]
         static void Main(string[] args)
         {
-            if (System.Diagnostics.Process.GetProcessesByName(System.Diagnostics.Process.GetCurrentProcess().ProcessName).Length > 1)
+            // initiallyOwned: false — we create it then try to acquire separately
+            _singleInstanceMutex = new Mutex(false, "PowerWallpaper_SingleInstance_9A3F2B1C");
+
+            bool acquired = false;
+            try
             {
-                return; // Another instance is already running
+                acquired = _singleInstanceMutex.WaitOne(0, false);
+            }
+            catch (AbandonedMutexException)
+            {
+                // Previous instance was killed without releasing. We have it now.
+                acquired = true;
             }
 
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
+            if (!acquired)
+            {
+                // Another instance is genuinely running — exit silently
+                return;
+            }
 
-            Logger.Log("=== Application Started ===");
-            bool isAutostart = args.Length > 0 && args[0] == "--autostart";
+            try
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
 
-            var config = ConfigManager.Load();
-            var powerMonitor = new PowerMonitor(config);
-            
-            powerMonitor.Start();
+                Logger.Log("=== Application Started ===");
+                bool isAutostart = args.Length > 0 && args[0] == "--autostart";
 
-            Application.Run(new PowerWallpaperContext(config, powerMonitor, isAutostart));
+                var config = ConfigManager.Load();
+                var powerMonitor = new PowerMonitor(config);
+
+                powerMonitor.Start();
+
+                Application.Run(new PowerWallpaperContext(config, powerMonitor, isAutostart));
+            }
+            finally
+            {
+                try { _singleInstanceMutex.ReleaseMutex(); } catch { }
+            }
         }
     }
 }
