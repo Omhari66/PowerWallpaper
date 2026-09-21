@@ -130,98 +130,92 @@ namespace PowerWallpaper
         public static void StartLively(string wallpaperPath)
         {
             CurrentWallpaperStatus = WallpaperStatus.Transitioning;
-            
-            if (!File.Exists(LivelyExecutablePath))
-            {
-                Logger.Log($"Error: Lively not found at {LivelyExecutablePath}");
-                return;
-            }
+            CurrentLivelyStatus = LivelyStatus.Starting;
 
-            if (!File.Exists(wallpaperPath))
+            // Resolve path before jumping to background thread
+            string resolvedPath = wallpaperPath;
+            if (!File.Exists(resolvedPath))
             {
-                // Resolve relative to application directory
                 string absPath = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, wallpaperPath));
-                if (!File.Exists(absPath))
-                {
-                    Logger.Log($"Live wallpaper not found: {wallpaperPath} (Resolved: {absPath})");
-                    // We can still start Lively, but won't set wp
-                }
-                else
-                {
-                    wallpaperPath = absPath;
-                }
+                if (File.Exists(absPath)) resolvedPath = absPath;
             }
 
-            if (!IsLivelyRunning())
+            // Run everything on a background thread so the UI/event thread is NEVER blocked
+            System.Threading.Tasks.Task.Run(() => StartLivelyBackground(resolvedPath));
+        }
+
+        private static void StartLivelyBackground(string wallpaperPath)
+        {
+            try
             {
-                CurrentLivelyStatus = LivelyStatus.Starting;
-                Logger.Log("Lively is not running. Starting Lively...");
-                try
+                if (!File.Exists(LivelyExecutablePath))
                 {
-                    var psi = new ProcessStartInfo
-                    {
-                        FileName = LivelyExecutablePath,
-                        UseShellExecute = true,
-                        WindowStyle = ProcessWindowStyle.Minimized
-                    };
-                    Process.Start(psi);
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log($"Failed to start Lively: {ex.Message}");
+                    Logger.Log($"Error: Lively not found at {LivelyExecutablePath}");
                     CurrentLivelyStatus = LivelyStatus.Error;
                     CurrentWallpaperStatus = WallpaperStatus.Error;
                     return;
                 }
-            }
 
-            // Wait for Lively to be ready before sending command
-            WaitForLivelyReady();
-
-            if (File.Exists(wallpaperPath))
-            {
-                Logger.Log($"Loading live wallpaper: {wallpaperPath}");
-                try
+                if (!IsLivelyRunning())
                 {
-                    var psiCmd = new ProcessStartInfo
+                    Logger.Log("Lively is not running. Starting Lively...");
+                    try
                     {
-                        FileName = LivelyExecutablePath,
-                        Arguments = $"setwp --file \"{wallpaperPath}\"",
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    };
-                    Process.Start(psiCmd);
-                    CurrentWallpaperStatus = WallpaperStatus.LiveActive;
+                        var psi = new ProcessStartInfo
+                        {
+                            FileName = LivelyExecutablePath,
+                            UseShellExecute = true,
+                            WindowStyle = ProcessWindowStyle.Minimized
+                        };
+                        Process.Start(psi);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"Failed to start Lively: {ex.Message}");
+                        CurrentLivelyStatus = LivelyStatus.Error;
+                        CurrentWallpaperStatus = WallpaperStatus.Error;
+                        return;
+                    }
+
+                    // Give Lively time to initialize — simple fixed wait, 3s max
+                    Thread.Sleep(3000);
                 }
-                catch (Exception ex)
+
+                if (File.Exists(wallpaperPath))
                 {
-                    Logger.Log($"Failed to send wallpaper command: {ex.Message}");
+                    Logger.Log($"Loading live wallpaper: {wallpaperPath}");
+                    try
+                    {
+                        var psiCmd = new ProcessStartInfo
+                        {
+                            FileName = LivelyExecutablePath,
+                            Arguments = $"setwp --file \"{wallpaperPath}\"",
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        };
+                        Process.Start(psiCmd);
+                        CurrentWallpaperStatus = WallpaperStatus.LiveActive;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log($"Failed to send wallpaper command: {ex.Message}");
+                        CurrentWallpaperStatus = WallpaperStatus.Error;
+                    }
+                }
+                else
+                {
+                    Logger.Log($"Live wallpaper not found: {wallpaperPath}");
                     CurrentWallpaperStatus = WallpaperStatus.Error;
                 }
-            }
-            else
-            {
-                // Just started Lively, but no wp file to set
-                CurrentWallpaperStatus = WallpaperStatus.Error;
-            }
-            CurrentLivelyStatus = LivelyStatus.Running;
-        }
 
-        private static void WaitForLivelyReady()
-        {
-            // Wait up to 10 seconds for Lively to stabilize
-            for (int i = 0; i < 20; i++)
-            {
-                var processes = GetLivelyOwnedProcesses();
-                // If it spawned its UI or Core process, it's getting ready
-                if (processes.Count > 1) 
-                {
-                    Thread.Sleep(1000); // Give it one more second after spawning children
-                    return;
-                }
-                Thread.Sleep(500);
+                CurrentLivelyStatus = LivelyStatus.Running;
+                Logger.Log("AC mode transition complete.");
             }
-            Logger.Log("Warning: Lively startup wait timeout.");
+            catch (Exception ex)
+            {
+                Logger.Log($"StartLively background error: {ex.Message}");
+                CurrentLivelyStatus = LivelyStatus.Error;
+            }
         }
 
         public static void KillLivelySafely()
@@ -229,48 +223,57 @@ namespace PowerWallpaper
             CurrentLivelyStatus = LivelyStatus.Stopping;
             Logger.Log("Attempting to close Lively completely...");
 
-            // First, ask it to shutdown gracefully via CLI if it supports it
-            try
-            {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = LivelyExecutablePath,
-                    Arguments = "--shutdown true",
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                Process.Start(psi);
-            }
-            catch { }
-
-            // Wait a bit for graceful exit
-            Thread.Sleep(2000);
-
-            var livelyProcesses = GetLivelyOwnedProcesses();
-            if (livelyProcesses.Count == 0)
-            {
-                Logger.Log("Lively exited gracefully.");
-                return;
-            }
-
-            Logger.Log($"Force terminating {livelyProcesses.Count} remaining Lively-owned processes...");
-            foreach (var p in livelyProcesses)
+            // Run on background thread — never block the UI/power-event thread
+            System.Threading.Tasks.Task.Run(() =>
             {
                 try
                 {
-                    if (!p.HasExited)
+                    var livelyProcesses = GetLivelyOwnedProcesses();
+                    if (livelyProcesses.Count == 0)
                     {
-                        Logger.Log($"Killing {p.ProcessName} (PID: {p.Id})");
-                        p.Kill();
+                        Logger.Log("Lively was not running.");
+                        CurrentLivelyStatus = LivelyStatus.NotRunning;
+                        return;
                     }
+
+                    Logger.Log($"Force terminating {livelyProcesses.Count} Lively-owned processes...");
+                    foreach (var p in livelyProcesses)
+                    {
+                        try
+                        {
+                            if (!p.HasExited)
+                            {
+                                Logger.Log($"Killing {p.ProcessName} (PID: {p.Id})");
+                                p.Kill();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Log($"Failed to kill {p.ProcessName}: {ex.Message}");
+                        }
+                    }
+
+                    // Wait up to 1s for processes to actually die
+                    Thread.Sleep(800);
+
+                    // Verify they're gone
+                    var remaining = GetLivelyOwnedProcesses();
+                    if (remaining.Count == 0)
+                    {
+                        Logger.Log("Battery mode transition complete.");
+                    }
+                    else
+                    {
+                        Logger.Log($"Warning: {remaining.Count} Lively process(es) still alive after kill.");
+                    }
+
+                    CurrentLivelyStatus = LivelyStatus.NotRunning;
                 }
                 catch (Exception ex)
                 {
-                    Logger.Log($"Failed to kill {p.ProcessName}: {ex.Message}");
+                    Logger.Log($"KillLively background error: {ex.Message}");
                 }
-            }
-            
-            CurrentLivelyStatus = LivelyStatus.NotRunning;
+            });
         }
 
         private static List<Process> GetLivelyOwnedProcesses()

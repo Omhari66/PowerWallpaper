@@ -26,7 +26,7 @@ namespace PowerWallpaper
         
         private readonly object _debounceLock = new object();
         private int _debounceToken = 0;
-        private const int DebounceMs = 2000;
+        private const int DebounceMs = 500;
 
         public PowerMonitor(Config config)
         {
