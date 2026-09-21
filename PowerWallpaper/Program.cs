@@ -36,6 +36,13 @@ namespace PowerWallpaper
             {
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
+                Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+
+                // Log ALL unhandled exceptions so silent crashes become visible
+                Application.ThreadException += (s, e) =>
+                    Logger.Log($"FATAL ThreadException: {e.Exception}");
+                AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+                    Logger.Log($"FATAL UnhandledException: {e.ExceptionObject}");
 
                 Logger.Log("=== Application Started ===");
                 bool isAutostart = args.Length > 0 && args[0] == "--autostart";
@@ -46,6 +53,10 @@ namespace PowerWallpaper
                 powerMonitor.Start();
 
                 Application.Run(new PowerWallpaperContext(config, powerMonitor, isAutostart));
+            }
+            catch (Exception ex)
+            {
+                Logger.Log($"FATAL startup exception: {ex}");
             }
             finally
             {

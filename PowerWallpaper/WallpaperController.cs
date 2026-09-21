@@ -177,8 +177,24 @@ namespace PowerWallpaper
                         return;
                     }
 
-                    // Give Lively time to initialize — simple fixed wait, 3s max
-                    Thread.Sleep(3000);
+                    // Poll until Lively spawns its child processes (proves it's initialized)
+                    // Cap at 15 seconds total
+                    Logger.Log("Waiting for Lively to initialize...");
+                    int waited = 0;
+                    while (waited < 15000)
+                    {
+                        Thread.Sleep(500);
+                        waited += 500;
+                        var procs = GetLivelyOwnedProcesses();
+                        if (procs.Count >= 2)
+                        {
+                            Logger.Log($"Lively initialized after {waited}ms ({procs.Count} processes).");
+                            Thread.Sleep(1000); // extra settle time
+                            break;
+                        }
+                    }
+                    if (waited >= 15000)
+                        Logger.Log("Warning: Lively init timeout after 15s, attempting setwp anyway.");
                 }
 
                 if (File.Exists(wallpaperPath))
