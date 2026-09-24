@@ -39,6 +39,27 @@ namespace PowerWallpaper
             Logger.Log("Starting power monitor...");
             // Initial check on startup
             DetectAndApplyState();
+
+            // Schedule a second enforcement check 15s after boot.
+            // This catches Lively if it starts via its own "Start with Windows" setting
+            // AFTER PowerWallpaper already ran the initial kill. Without this, Lively
+            // can start itself 5-10s into boot and appear on battery.
+            Task.Run(async () =>
+            {
+                await Task.Delay(15000);
+                var status = SystemInformation.PowerStatus.PowerLineStatus;
+                bool onBattery = status != PowerLineStatus.Online;
+                if (onBattery && WallpaperController.IsLivelyRunning())
+                {
+                    Logger.Log("Boot enforcer: Lively started on battery after initial check. Killing it.");
+                    WallpaperController.SetWindowsStaticWallpaper(_config.BatteryWallpaper);
+                    WallpaperController.KillLivelySafely();
+                }
+                else
+                {
+                    Logger.Log($"Boot enforcer: state OK ({(onBattery ? "BATTERY" : "AC")}, Lively={WallpaperController.IsLivelyRunning()}).");
+                }
+            });
         }
 
         public void Stop()
