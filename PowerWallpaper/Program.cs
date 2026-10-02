@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Diagnostics;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -46,6 +48,26 @@ namespace PowerWallpaper
 
                 Logger.Log("=== Application Started ===");
                 bool isAutostart = args.Length > 0 && args[0] == "--autostart";
+
+                if (!File.Exists(WallpaperController.LivelyExecutablePath))
+                {
+                    Logger.Log("Lively Wallpaper executable not found. Halting startup.");
+                    var result = MessageBox.Show(
+                        "Lively Wallpaper is required for PowerWallpaper to function but it was not found on your system.\n\nWould you like to download it now from the Microsoft Store?", 
+                        "Dependency Missing", 
+                        MessageBoxButtons.YesNo, 
+                        MessageBoxIcon.Error);
+
+                    if (result == DialogResult.Yes)
+                    {
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = "ms-windows-store://pdp/?productid=9pfvd125z6jx",
+                            UseShellExecute = true
+                        });
+                    }
+                    return;
+                }
 
                 var config = ConfigManager.Load();
                 var powerMonitor = new PowerMonitor(config);

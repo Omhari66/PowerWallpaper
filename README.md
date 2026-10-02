@@ -2,6 +2,8 @@
 
 > **Automatic live ↔ static wallpaper switching based on your laptop's power state.**
 
+[![Download Latest Release](https://img.shields.io/github/v/release/Omhari66/PowerWallpaper?style=for-the-badge&label=Download%20Latest%20Release)](https://github.com/Omhari66/PowerWallpaper/releases/latest)
+
 PowerWallpaper is a lightweight, open-source C# Windows 11 system tray utility that works alongside [Lively Wallpaper](https://github.com/rocksdanister/lively) to give you stunning live video wallpapers when plugged in — and a battery-saving static wallpaper the moment you unplug.
 
 ---
@@ -42,17 +44,16 @@ With PowerWallpaper:
 ## Requirements
 
 - Windows 11
-- [.NET 10.0 Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
 - [Lively Wallpaper](https://apps.microsoft.com/detail/9pfvd125z6jx) (Microsoft Store or desktop installer)
+
+*(Note: The downloadable `.exe` is completely self-contained. You do **not** need to install the .NET runtime!)*
 
 ---
 
 ## Installation & Setup
 
-1. Download `PowerWallpaper.exe` from the [Releases](../../releases) tab.  
-   *(Or build from source — see below)*
-
-2. Double-click `PowerWallpaper.exe` to launch.  
+1. Go to the [Releases](https://github.com/Omhari66/PowerWallpaper/releases/latest) page and download `PowerWallpaper_v1.0.0.zip`.
+2. Extract the `.zip` file and double-click `PowerWallpaper.exe` to launch.  
    > **Note:** If Windows Smart App Control blocks it, right-click → Properties → check **Unblock**, or add your folder to Windows Defender exclusions.
 
 3. The Dashboard opens on first launch. Configure your wallpapers:
