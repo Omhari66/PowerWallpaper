@@ -45,6 +45,12 @@ namespace PowerWallpaper
             };
             
             _trayIcon.DoubleClick += (s, e) => ShowDashboard();
+            _trayIcon.Click += (s, e) =>
+            {
+                // Single left-click also opens the dashboard (easier than double-click)
+                if (((MouseEventArgs)e).Button == MouseButtons.Left)
+                    ShowDashboard();
+            };
             
             UpdateTrayStatusUI(statusItem, pauseItem);
             
@@ -57,12 +63,18 @@ namespace PowerWallpaper
         
         private void ShowDashboard()
         {
-            _mainForm.Show();
+            // Restore from minimized if needed
             if (_mainForm.WindowState == FormWindowState.Minimized)
-            {
                 _mainForm.WindowState = FormWindowState.Normal;
-            }
+
+            _mainForm.Show();
+            _mainForm.BringToFront();
+
+            // Briefly set TopMost to guarantee the window appears above everything.
+            // Windows blocks focus-steals by default, but TopMost bypasses that.
+            _mainForm.TopMost = true;
             _mainForm.Activate();
+            _mainForm.TopMost = false;
         }
 
         private void UpdateTrayStatusUI(ToolStripMenuItem statusItem, ToolStripMenuItem pauseItem)
