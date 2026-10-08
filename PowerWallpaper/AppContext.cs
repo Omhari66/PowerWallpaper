@@ -10,6 +10,7 @@ namespace PowerWallpaper
         private readonly MainForm _mainForm;
         private readonly PowerMonitor _powerMonitor;
         private readonly Config _config;
+        private System.Windows.Forms.Timer? _statusTimer;
 
         public PowerWallpaperContext(Config config, PowerMonitor powerMonitor, bool isAutostart)
         {
@@ -45,10 +46,10 @@ namespace PowerWallpaper
             };
             
             _trayIcon.DoubleClick += (s, e) => ShowDashboard();
-            _trayIcon.Click += (s, e) =>
+            _trayIcon.MouseClick += (s, e) =>
             {
-                // Single left-click also opens the dashboard (easier than double-click)
-                if (((MouseEventArgs)e).Button == MouseButtons.Left)
+                // Single left-click opens dashboard; right-click is handled by ContextMenuStrip automatically
+                if (e.Button == MouseButtons.Left)
                     ShowDashboard();
             };
             
@@ -79,8 +80,8 @@ namespace PowerWallpaper
 
         private void UpdateTrayStatusUI(ToolStripMenuItem statusItem, ToolStripMenuItem pauseItem)
         {
-            var timer = new System.Windows.Forms.Timer { Interval = 2000 };
-            timer.Tick += (s, e) =>
+            _statusTimer = new System.Windows.Forms.Timer { Interval = 2000 };
+            _statusTimer.Tick += (s, e) =>
             {
                 var state = _powerMonitor.CurrentPowerState;
                 string stateStr = state == PowerState.AC ? "AC Power" : state == PowerState.BATTERY ? "Battery" : "Unknown";
@@ -90,10 +91,9 @@ namespace PowerWallpaper
                                WallpaperController.CurrentWallpaperStatus == WallpaperStatus.Transitioning ? "Transitioning..." : "";
                 
                 statusItem.Text = $"[{stateStr}] {wpStr}";
-                
                 pauseItem.Text = _config.PauseAutomation ? "Resume Automation" : "Pause Automation";
             };
-            timer.Start();
+            _statusTimer.Start();
         }
 
         private void OnTogglePause(object sender, EventArgs e)
@@ -109,6 +109,8 @@ namespace PowerWallpaper
 
         private void OnExit(object sender, EventArgs e)
         {
+            _statusTimer?.Stop();
+            _statusTimer?.Dispose();
             _trayIcon.Visible = false;
             _powerMonitor.Stop();
             Application.Exit();

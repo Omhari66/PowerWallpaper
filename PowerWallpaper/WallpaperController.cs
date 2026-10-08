@@ -123,8 +123,11 @@ namespace PowerWallpaper
 
         public static bool IsLivelyRunning()
         {
-            var p = Process.GetProcessesByName("Lively").FirstOrDefault();
-            return p != null && !p.HasExited;
+            // Check both Lively.exe and its watchdog (which starts first during boot)
+            var lively = Process.GetProcessesByName("Lively").FirstOrDefault();
+            if (lively != null && !lively.HasExited) return true;
+            var watchdog = Process.GetProcessesByName("Lively.Watchdog").FirstOrDefault();
+            return watchdog != null && !watchdog.HasExited;
         }
 
         public static void StartLively(string wallpaperPath)
@@ -297,6 +300,19 @@ namespace PowerWallpaper
             var livelyProcesses = new List<Process>();
             var allLocalProcesses = Process.GetProcesses();
             
+            // Determine the Lively install directory safely
+            string? exeDir = Path.GetDirectoryName(LivelyExecutablePath);
+            string? installDir = exeDir != null ? Path.GetDirectoryName(exeDir) : null;
+
+            if (string.IsNullOrEmpty(installDir))
+            {
+                Logger.Log("Warning: Could not determine Lively install directory. Using process name fallback.");
+                return Process.GetProcessesByName("Lively")
+                    .Concat(Process.GetProcessesByName("Lively.Watchdog"))
+                    .Concat(Process.GetProcessesByName("mpv"))
+                    .ToList();
+            }
+
             try
             {
                 using (var searcher = new ManagementObjectSearcher("SELECT ProcessId, ExecutablePath FROM Win32_Process"))
@@ -309,16 +325,12 @@ namespace PowerWallpaper
                         
                         if (path != null && pidObj != null)
                         {
-                            // Strict string match: Only processes installed in the Lively app directory
-                            string installDir = Path.GetDirectoryName(Path.GetDirectoryName(LivelyExecutablePath));
                             if (path.StartsWith(installDir, StringComparison.OrdinalIgnoreCase))
                             {
                                 int pid = Convert.ToInt32(pidObj);
                                 var proc = allLocalProcesses.FirstOrDefault(p => p.Id == pid);
                                 if (proc != null)
-                                {
                                     livelyProcesses.Add(proc);
-                                }
                             }
                         }
                     }
@@ -327,9 +339,9 @@ namespace PowerWallpaper
             catch (Exception ex)
             {
                 Logger.Log($"WMI Query failed: {ex.Message}");
-                // Fallback: Extremely conservative kill, ONLY Lively.exe, never mpv
-                var fallback = Process.GetProcessesByName("Lively").ToList();
-                livelyProcesses.AddRange(fallback);
+                // Fallback: conservative kill — only Lively-named processes
+                livelyProcesses.AddRange(Process.GetProcessesByName("Lively"));
+                livelyProcesses.AddRange(Process.GetProcessesByName("Lively.Watchdog"));
             }
 
             return livelyProcesses;

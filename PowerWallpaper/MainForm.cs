@@ -33,7 +33,6 @@ namespace PowerWallpaper
             
             _uiTimer = new System.Windows.Forms.Timer { Interval = 1000 };
             _uiTimer.Tick += UiTimer_Tick;
-            _uiTimer.Start();
             
             // Initial update
             WallpaperController.UpdateLivelyStatus();
@@ -141,13 +140,33 @@ namespace PowerWallpaper
 
         private void SaveConfig()
         {
-            _config.ChargingWallpaper = txtCharging.Text;
-            _config.BatteryWallpaper = txtBattery.Text;
+            // Validate paths before saving
+            string chargingPath = txtCharging.Text.Trim();
+            string batteryPath = txtBattery.Text.Trim();
+
+            var warnings = new System.Text.StringBuilder();
+            if (!string.IsNullOrEmpty(chargingPath) && !File.Exists(chargingPath))
+                warnings.AppendLine($"• Charging wallpaper file not found:\n  {chargingPath}");
+            if (!string.IsNullOrEmpty(batteryPath) && !File.Exists(batteryPath))
+                warnings.AppendLine($"• Battery wallpaper file not found:\n  {batteryPath}");
+
+            if (warnings.Length > 0)
+            {
+                var result = MessageBox.Show(
+                    $"Warning — the following paths could not be verified:\n\n{warnings}\nSave anyway?",
+                    "Invalid Paths", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                if (result == DialogResult.No) return;
+            }
+
+            _config.ChargingWallpaper = chargingPath;
+            _config.BatteryWallpaper = batteryPath;
             _config.StartWithWindows = chkStartWithWindows.Checked;
             _config.PauseAutomation = chkPauseAutomation.Checked;
             
             ConfigManager.Save(_config);
             ManageRegistryAutostart();
+
+            MessageBox.Show("Settings saved!", "PowerWallpaper", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void ManageRegistryAutostart()
@@ -225,6 +244,22 @@ namespace PowerWallpaper
                 this.Hide(); // Minimize to tray
             }
             base.OnFormClosing(e);
+        }
+
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            base.OnVisibleChanged(e);
+            // Pause the update timer when form is hidden — no point doing work nobody sees
+            if (Visible)
+            {
+                WallpaperController.UpdateLivelyStatus();
+                UpdateStatusLabels();
+                _uiTimer.Start();
+            }
+            else
+            {
+                _uiTimer.Stop();
+            }
         }
     }
 }
